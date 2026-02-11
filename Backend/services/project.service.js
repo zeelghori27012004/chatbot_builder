@@ -147,3 +147,146 @@ export const deleteProjectById = async ({ projectId, userId }) => {
   return { message: "Project deleted successfully" };
 };
 
+export const updateProjectFlow = async ({ projectId, fileTree }) => {
+  if (!isValidObjectId(projectId)) throw new Error("Invalid Project ID");
+  if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new Error("Invalid projectId");
+  }
+
+  const project = await projectModel.findById(projectId);
+  if (!project) {
+    throw new Error("Project not found");
+  }
+
+  project.fileTree = fileTree;
+  return await project.save();
+};
+
+export const updateProjectName = async ({ projectId, name, userId }) => {
+  if (!isValidObjectId(projectId)) throw new Error("Invalid Project ID");
+  if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new Error("Invalid projectId");
+  }
+
+  if (!name || typeof name !== "string") {
+    throw new Error("Project name must be a valid string");
+  }
+
+  const project = await projectModel.findOne({ _id: projectId });
+
+  if (!project) {
+    throw new Error("Project not found");
+  }
+
+  if (!project.users.includes(userId)) {
+    throw new Error("User does not have permission to update this project");
+  }
+
+  project.name = name.toLowerCase().trim();
+
+  try {
+    return await project.save();
+  } catch (err) {
+    if (err.code === 11000) {
+      throw new Error("Project name already exists");
+    }
+    throw err;
+  }
+};
+
+export const searchProjectsByName = async ({ name, userId }) => {
+  if (!name || !userId) {
+    throw new Error("Name and userId are required");
+  }
+
+  const regex = new RegExp(name, "i"); // case-insensitive partial match
+
+  const projects = await projectModel.find({
+    name: { $regex: regex },
+    users: userId,
+  });
+
+  return projects;
+};
+
+export const removeUserFromProject = async ({
+  projectId,
+  userToRemove,
+  requestedBy,
+}) => {
+  if (!isValidObjectId(projectId) || !isValidObjectId(userIdToRemove)) {
+    throw new Error("Invalid IDs");
+  }
+  const project = await projectModel.findOne({ _id: projectId });
+
+  if (!project) throw new Error("Project not found");
+  if (!project.users.includes(requestedBy)) throw new Error("Not authorized");
+
+  project.users = project.users.filter((u) => u.toString() !== userToRemove);
+  return await project.save();
+};
+
+export const updateWhatsappConfig = async ({
+  projectId,
+  userId,
+  configData,
+}) => {
+  if (!isValidObjectId(projectId)) throw new Error("Invalid Project ID");
+
+  const project = await projectModel.findOne({ _id: projectId, users: userId });
+
+  if (!project) {
+    throw new Error("Project not found or user not authorized");
+  }
+
+  const {
+    whatsappPhoneNumberId,
+    whatsappAccessToken,
+    whatsappWebhookVerifyToken,
+  } = configData;
+
+  project.whatsappPhoneNumberId = whatsappPhoneNumberId;
+  project.whatsappAccessToken = whatsappAccessToken;
+  project.whatsappWebhookVerifyToken = whatsappWebhookVerifyToken;
+
+  return await project.save();
+};
+
+export const toggleProjectActiveState = async ({ projectId, userId }) => {
+  if (!isValidObjectId(projectId)) throw new Error("Invalid Project ID");
+
+  const project = await projectModel.findOne({ _id: projectId, users: userId });
+
+  if (!project) {
+    throw new Error("Project not found or user not authorized");
+  }
+
+  const isActivating = !project.isActive;
+
+  if (isActivating) {
+    // Validate flow before activation
+    const validationResult = validateFlow(project.fileTree?.nodes || [], project.fileTree?.edges || []);
+    if (!validationResult.isValid) {
+      throw new Error(`Flow validation failed: ${validationResult.errors.join(', ')}`);
+    }
+
+    const existingActive = await projectModel.findOne({
+      users: userId,
+      isActive: true,
+      _id: { $ne: projectId },
+    });
+
+    if (existingActive) {
+      throw new Error("Only one project can be active at a time.");
+    }
+  }
+
+  project.isActive = isActivating;
+  const updated = await project.save();
+
+  return {
+    message: `Project ${isActivating ? "activated" : "deactivated"} successfully.`,
+    project: updated,
+  };
+};
+
