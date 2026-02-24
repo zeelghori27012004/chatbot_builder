@@ -94,3 +94,150 @@ export async function processMessage({
       "Matching against button IDs:",
       buttons.map((btn, index) => `btn_${index + 1}_${normalizeLabel(btn)}`)
     );
+
+    // Match based on reply ID format
+    const matchedIndex = buttons.findIndex(
+      (btn, index) =>
+        normalizedInput === `btn_${index + 1}_${normalizeLabel(btn)}`
+    );
+
+    const matchedLabel = matchedIndex !== -1 ? buttons[matchedIndex] : null;
+
+    if (matchedLabel) {
+      console.log(`Matched button: "${matchedLabel}"`);
+
+      const nextNodeId = findNextNode(
+        nodeId,
+        fileTree.edges,
+        normalizeLabel(matchedLabel)
+      );
+
+      if (nextNodeId) {
+        await redisClient.set(userStateKey, nextNodeId, "EX", 3600);
+        await redisClient.del(`${userStateKey}:awaitingButtonResponse`);
+        await redisClient.del(`${userStateKey}:buttonInvalidCount`);
+
+        console.log(`➡ Moving to next node: ${nextNodeId}`);
+        await executeNode(nextNodeId, {
+          projectId,
+          senderWaPhoneNo,
+          messageText,
+          fileTree,
+          userStateKey,
+          buttonReplyId,
+        });
+        return;
+      }
+    } else {
+      console.warn("No matching button found.");
+
+      const invalidCountKey = `${userStateKey}:buttonInvalidCount`;
+      let invalidCount = 0;
+      try {
+        const countStr = await redisClient.get(invalidCountKey);
+        invalidCount = countStr ? parseInt(countStr, 10) : 0;
+      } catch (err) {
+        console.error("Error reading invalid count from Redis:", err);
+      }
+
+      invalidCount += 1;
+
+      if (invalidCount >= 3) {
+        console.warn(
+          `User ${senderWaPhoneNo} exceeded invalid attempts. Ending flow.`
+        );
+
+        await sendWhatsappMessage({
+          to: senderWaPhoneNo,
+          text: `You've entered too many invalid responses (3/3).\nEnding this session. Please try again later if needed.`,
+          projectId,
+        });
+
+        await redisClient.del(userStateKey);
+        await redisClient.del(`${userStateKey}:awaitingButtonResponse`);
+        await redisClient.del(invalidCountKey);
+
+        const endNode = fileTree.nodes.find((n) => n.type === "end");
+        if (endNode) {
+          await executeNode(endNode.id, {
+            projectId,
+            senderWaPhoneNo,
+            messageText,
+            fileTree,
+            userStateKey,
+            buttonReplyId,
+          });
+        }
+
+        return;
+      }
+
+      await redisClient.set(
+        invalidCountKey,
+        invalidCount.toString(),
+        "EX",
+        3600
+      );
+
+      await sendWhatsappMessage({
+        to: senderWaPhoneNo,
+        text: `Invalid response. Please choose one of the buttons. (${invalidCount}/3 attempts used)`,
+        projectId,
+      });
+
+      return;
+    }
+  }
+
+   // 2. Global button check
+  for (const node of fileTree.nodes) {
+    if (node.type === "buttons") {
+      const buttons = node.data?.properties?.buttons || [];
+
+      const matchedIndex = buttons.findIndex(
+        (btn, index) =>
+          normalizedInput === `btn_${index + 1}_${normalizeLabel(btn)}`
+      );
+
+      const matchedLabel = matchedIndex !== -1 ? buttons[matchedIndex] : null;
+
+      if (matchedLabel) {
+        const nextNodeId = findNextNode(
+          node.id,
+          fileTree.edges,
+          normalizeLabel(matchedLabel)
+        );
+        if (nextNodeId) {
+          await redisClient.set(userStateKey, nextNodeId, "EX", 3600);
+          await redisClient.del(`${userStateKey}:awaitingButtonResponse`);
+          await redisClient.del(`${userStateKey}:buttonInvalidCount`);
+          await executeNode(nextNodeId, {
+            projectId,
+            senderWaPhoneNo,
+            messageText,
+            fileTree,
+            userStateKey,
+            buttonReplyId,
+          });
+          return;
+        }
+      }
+    }
+  }
+
+  // 3. Continue or start normal flow
+  let currentNodeId = null;
+  try {
+    currentNodeId = await redisClient.get(userStateKey);
+  } catch (err) {
+    console.error("Redis error while getting currentNodeId:", err);
+  }
+
+  if (!currentNodeId) {
+    const startNode = fileTree.nodes.find((node) => node.type === "start");
+    if (!startNode) {
+      console.error("No start node found.");
+      return;
+    }
+    currentNodeId = startNode.id;
+  }
