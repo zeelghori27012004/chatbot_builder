@@ -348,3 +348,241 @@ export async function processMessage({
       return;
     }
   }
+  //------------------------------ question - node ends-------------------------------//
+
+  await executeNode(currentNodeId, {
+    projectId,
+    senderWaPhoneNo,
+    messageText,
+    fileTree,
+    userStateKey,
+    buttonReplyId,
+  });
+}
+
+// Executes a node in the flow
+async function executeNode(nodeId, context) {
+  const {projectId, senderWaPhoneNo, fileTree, userStateKey} = context;
+  const node = fileTree.nodes.find((n) => n.id === nodeId);
+  if (!node) {
+    console.error(`Node with ID ${nodeId} not found.`);
+    await redisClient.del(userStateKey);
+    return;
+  }
+
+  console.log(`Executing node ${node.id} of type ${node.type}`);
+
+  const quickReply = node.data?.properties?.quickReply;
+  if (quickReply) {
+    await sendWhatsappMessage({
+      to: context.senderWaPhoneNo,
+      text: await interpolate(quickReply, projectId, senderWaPhoneNo),
+      projectId: context.projectId,
+    });
+  }
+
+  let nextNodeId = null;
+
+  switch (node.type) {
+    case "start":
+      nextNodeId = findNextNode(node.id, fileTree.edges);
+      break;
+
+    case "message":
+      const message = node.data?.properties?.message || "Default message";
+      await sendWhatsappMessage({
+        to: context.senderWaPhoneNo,
+        text: await interpolate(message, projectId, senderWaPhoneNo),
+        projectId: context.projectId,
+      });
+      nextNodeId = findNextNode(node.id, fileTree.edges);
+      break;
+
+    case "keywordMatch":
+      const keywords = node.data?.properties?.keywords || [];
+      const lowerMessage = context.messageText?.toLowerCase() || "";
+
+      const matches = keywords.some((k) =>
+        lowerMessage.includes(k.toLowerCase())
+      );
+
+      nextNodeId = findNextNode(
+        node.id,
+        fileTree.edges,
+        matches ? "Success" : "Failure"
+      );
+      break;
+
+    case "buttons": {
+      const buttonText = node.data?.properties?.message || "Choose an option:";
+      const buttons = node.data?.properties?.buttons || [];
+
+      const normalizedResponse = context.buttonReplyId
+        ? context.buttonReplyId.trim().toLowerCase()
+        : normalizeLabel(context.messageText || "");
+
+      const matchedIndex = buttons.findIndex(
+        (btn, index) =>
+          normalizedResponse === `btn_${index + 1}_${normalizeLabel(btn)}`
+      );
+
+      const matchedLabel = matchedIndex !== -1 ? buttons[matchedIndex] : null;
+
+      if (matchedLabel) {
+        const nextNodeId = findNextNode(
+          node.id,
+          fileTree.edges,
+          normalizeLabel(matchedLabel)
+        );
+
+        if (nextNodeId) {
+          await redisClient.set(userStateKey, nextNodeId, "EX", 3600);
+          await redisClient.del(`${userStateKey}:awaitingButtonResponse`);
+          await redisClient.del(`${userStateKey}:buttonInvalidCount`);
+
+          console.log(`Matched and moving to next node: ${nextNodeId}`);
+          await executeNode(nextNodeId, context);
+          return;
+        } else {
+          console.warn(
+            `Matched label "${matchedLabel}" but no next node found.`
+          );
+        }
+      }
+
+      // If no match or first time, send the button options
+      const formattedButtons = buttons.map((btn, index) => ({
+        type: "reply",
+        reply: {
+          id: `btn_${index + 1}_${normalizeLabel(btn)}`,
+          title: btn,
+        },
+      }));
+
+      await sendWhatsappMessage({
+        to: context.senderWaPhoneNo,
+        text: await interpolate(buttonText, projectId, senderWaPhoneNo),
+        projectId: context.projectId,
+        buttons: formattedButtons,
+      });
+
+      await redisClient.set(
+        `${userStateKey}:awaitingButtonResponse`,
+        JSON.stringify({
+          nodeId: node.id,
+          buttons: buttons,
+        }),
+        "EX",
+        3600
+      );
+      await redisClient.del(`${userStateKey}:buttonInvalidCount`);
+      return;
+    }
+
+    case "askaQuestion": {
+      const alreadyAsked = await redisClient.get(`${userStateKey}:asked`);
+      if (alreadyAsked) return; // already asked, waiting for reply
+
+      const questionText = node.data?.properties?.question || "Please reply:";
+      await sendWhatsappMessage({
+        to: context.senderWaPhoneNo,
+        type: "text",
+        text: await interpolate(questionText, projectId, senderWaPhoneNo),
+        projectId: context.projectId,
+      });
+      await redisClient.set(`${userStateKey}:asked`, "true", "EX", 3600);
+      return; // pause until user replies
+    }
+
+    case "apiCall": {
+      const {
+        method,
+        url,
+        headers = {},
+        selectedField,
+      } = node.data?.properties || {};
+
+      if (!method || !url) break;
+
+      try {
+        // Replace {{variable}} in URL from Redis
+        const variableRegex = /{{(.*?)}}/g;
+        let compiledUrl = url;
+        for (const match of [...url.matchAll(variableRegex)]) {
+          const variableName = match[1];
+          const redisKey = `${context.projectId}_${context.senderWaPhoneNo}_${variableName}`;
+          const variableValue = await redisClient.get(redisKey);
+          if (!variableValue)
+            throw new Error(`Missing value for variable "${variableName}"`);
+          compiledUrl = compiledUrl.replace(
+            `{{${variableName}}}`,
+            variableValue
+          );
+        }
+
+        // Make API request
+        const response = await axios({method, url: compiledUrl, headers});
+
+        // new logic
+        const rawPath = selectedField?.path || "";
+        const cleanedPath = rawPath.replace(/^\./, ""); // Remove leading dot if present
+        const value = _.get(response.data, cleanedPath);
+
+        console.log("rawPath : ", rawPath);
+        console.log("cleanedPath : ", cleanedPath);
+        console.log("value : ", value);
+
+        if (!value)
+          throw new Error("Selected field not found in API response.");
+
+        await sendWhatsappMedia({
+          to: context.senderWaPhoneNo,
+          // type: "document", // default to document
+          content: {
+            mediaUrl: value,
+          },
+          projectId: context.projectId,
+        });
+
+        nextNodeId = findNextNode(node.id, fileTree.edges, "Success");
+      } catch (err) {
+        console.error("API Call Failed:", err.message);
+
+        nextNodeId = findNextNode(node.id, fileTree.edges, "Failure");
+      }
+
+      break;
+    }
+
+    case "end":
+      console.log("Flow ended by end node.");
+      await redisClient.del(userStateKey);
+      return;
+
+    default:
+      console.warn(`Unsupported node type: ${node.type}`);
+      await sendWhatsappMessage({
+        to: context.senderWaPhoneNo,
+        text: "Something went wrong. Please try again later.",
+        projectId: context.projectId,
+      });
+      await redisClient.del(userStateKey);
+      return;
+  }
+
+  const waitForReply = node.data?.properties?.waitForUserReply === true;
+
+  if (nextNodeId) {
+    await redisClient.set(userStateKey, nextNodeId, "EX", 3600);
+    if (!waitForReply) {
+      await executeNode(nextNodeId, context);
+    } else {
+      console.log(
+        `Waiting for user reply before continuing from node ${node.id}`
+      );
+    }
+  } else {
+    console.log(`Flow ended. No next node from ${node.id}.`);
+    await redisClient.del(userStateKey);
+  }
+}
