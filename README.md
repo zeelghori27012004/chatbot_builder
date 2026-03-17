@@ -5,8 +5,6 @@
 ---
 
 ## Live Demo
- 
-https://chatforge.antimtechnologies.com/
 
 ---
 
