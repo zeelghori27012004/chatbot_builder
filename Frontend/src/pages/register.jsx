@@ -12,6 +12,7 @@ export default function Register() {
     password: "",
     isAdmin: false,
   });
+  
   const { setUser, user } = useContext(UserContext);
   const navigate = useNavigate();
   const [error, setError] = useState("");
@@ -45,6 +46,7 @@ export default function Register() {
     }
   };
 
+  
   useEffect(() => {
     // Prevent already logged-in users from accessing register page
     if (user) {
