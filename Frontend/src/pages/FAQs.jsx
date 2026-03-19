@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
+
 const faqs = [
   {
     question: "What is ChatForge?",
@@ -33,6 +34,7 @@ const faqs = [
       "During setup, we guide you step-by-step through connecting your verified WhatsApp Business number using Meta’s API.",
   },
 ];
+
 
 export default function Faqs() {
   const [openIndex, setOpenIndex] = useState(null);
