@@ -10,6 +10,7 @@ export default function PrivacyPolicy() {
           </p>
         </div>
 
+        
         {/* Intro */}
         <p className="mb-6 text-sm text-black leading-relaxed">
           The terms "We", "Us", "Our", or "Company" refer to the owners and
@@ -163,6 +164,7 @@ export default function PrivacyPolicy() {
           </div>
         ))}
 
+        
         {/* Footer Note */}
         <p className="text-xs text-gray-500 mt-12 text-center">
           By using this Website, you acknowledge that you have read and
