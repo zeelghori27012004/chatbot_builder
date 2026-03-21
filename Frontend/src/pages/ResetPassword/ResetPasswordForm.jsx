@@ -8,6 +8,7 @@ import {
   resetPassword,
 } from "../../services/authService"; // Adjust the import path as needed
 
+
 // A self-contained SVG spinner component using Tailwind's `animate-spin`
 const Spinner = () => (
   <svg
@@ -77,6 +78,7 @@ export default function ResetPasswordForm() {
     }
   };
 
+  
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setError("");
