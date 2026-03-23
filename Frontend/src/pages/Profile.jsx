@@ -26,6 +26,7 @@ export default function Profile() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  
   useEffect(() => {
     if (!user) {
       setLoading(true);
@@ -69,6 +70,7 @@ export default function Profile() {
     }
   }, [user]);
 
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (["youtube", "instagram", "facebook", "twitter", "github", "website"].includes(name)) {
