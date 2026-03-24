@@ -43,6 +43,7 @@ export default function Projects() {
       }
     };
 
+    
     document.addEventListener("mousedown", handleClickOutside);
     fetchProjects();
 
@@ -69,6 +70,7 @@ export default function Projects() {
     }
   };
 
+  
   const createProjectPopup = () => {
     setCreateProjectModal(true);
   };
