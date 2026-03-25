@@ -11,6 +11,7 @@ export default function Services() {
         </p>
       </div>
 
+      
       {/* Service Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
         {/* Service Card */}
@@ -68,6 +69,7 @@ export default function Services() {
           </p>
         </div>
 
+        
         {/* Service Card */}
         <div className="p-6 bg-white rounded-2xl shadow hover:shadow-md transition">
           <div className="bg-blue-100 p-3 inline-block rounded-xl mb-4">
