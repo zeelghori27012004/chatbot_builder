@@ -11,6 +11,8 @@ export default function Support() {
         </p>
       </div>
 
+      
+
       {/* Support Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm mb-16">
         <div className="bg-white p-6 rounded-xl shadow text-center">
@@ -63,6 +65,7 @@ export default function Support() {
         </form>
       </div>
 
+      
       {/* Quick Help Links */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
         <a
