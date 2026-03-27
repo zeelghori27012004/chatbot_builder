@@ -6,6 +6,7 @@ export default function Team() {
       image: "https://png.pngtree.com/png-clipart/20230927/original/pngtree-man-avatar-image-for-profile-png-image_13001882.png",
       bio: "",
     },
+    
     {
       name: "Yash Tarpara",
       role: "Backend Developer",
@@ -33,6 +34,7 @@ export default function Team() {
 
   ];
 
+  
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
       {/* Header */}
@@ -62,6 +64,7 @@ export default function Team() {
         ))}
       </div>
 
+      
       {/* Call to Action */}
       <div className="mt-20 text-center">
         <h2 className="text-2xl font-semibold text-gray-800">Want to work with us?</h2>
