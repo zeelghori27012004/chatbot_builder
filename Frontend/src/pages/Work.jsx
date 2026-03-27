@@ -8,6 +8,7 @@ export default function Work() {
       industry: "Technology",
       description: "Reduced support ticket volume by 40% using an interactive FAQ bot on WhatsApp.",
     },
+    
     {
       icon: <ShoppingBag className="w-6 h-6 text-blue-600" />,
       title: "E-commerce Sales Assistant",
@@ -26,6 +27,7 @@ export default function Work() {
       industry: "Education",
       description: "Deployed at a university to answer common student queries 24/7.",
     },
+    
     {
       icon: <Headset className="w-6 h-6 text-blue-600" />,
       title: "Customer Support Bot",
@@ -64,6 +66,7 @@ export default function Work() {
         ))}
       </div>
 
+      
       {/* Call to Action */}
       <div className="mt-16 text-center">
         <h2 className="text-2xl font-semibold text-gray-800">Want to build something similar?</h2>
