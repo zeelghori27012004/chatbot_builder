@@ -1,7 +1,6 @@
 import projectModel from "../models/project.model.js";
 import { processMessage } from "../services/flowExecutor.service.js";
 
-// Webhook verification (GET /webhook)
 export const verifyWebhook = (req, res) => {
   const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
 
@@ -17,7 +16,6 @@ export const verifyWebhook = (req, res) => {
   return res.sendStatus(403);
 };
 
-// Incoming message handler (POST /webhook)
 export const handleIncomingMessage = async (req, res) => {
   try {
     const body = req.body;
@@ -50,7 +48,7 @@ export const handleIncomingMessage = async (req, res) => {
     const messageText = message?.text?.body || "";
     const buttonReplyId = message?.interactive?.button_reply?.id || "";
 
-    // Send both text and button id to the processor
+
     await processMessage({
       projectId: project._id,
       senderWaPhoneNo: from,
